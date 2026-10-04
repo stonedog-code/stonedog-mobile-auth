@@ -1,0 +1,17 @@
+{
+  "//why": "A separate config for the published build: the root one is noEmit and sees jest globals, and declarations that referenced jest would break every consumer. This one emits, and sees only what ships.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "coverage", "src/**/__tests__/**"]
+}
