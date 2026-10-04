@@ -1,0 +1,48 @@
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 / npm 11, matching the machines that write the lockfile. An older
+      # npm refuses a lockfile written by a newer one.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci`, not `npm install`: it fails when package.json and the
+      # lockfile have drifted instead of silently repairing the drift.
+      - run: npm ci
+
+      - run: npm run type-check
+
+      # No `--fix` anywhere in CI.
+      - run: npm run lint
+
+      # Coverage thresholds are enforced, not just measured.
+      - run: npm run test:coverage
+
+      # A green gate that examined nothing is the failure this guards against.
+      - name: Prove the gate was not vacuous
+        run: |
+          linted=$(npx eslint . -f json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).length))')
+          echo "eslint examined $linted files"
+          test "$linted" -ge 8
+
+      - run: npm run verify:package
+
+      - name: No logging in shipped source
+        run: |
+          set -euo pipefail
+          if grep -rnE 'console\.(log|info|warn|error|debug)' src --include='*.ts' | grep -v '__tests__'; then
+            echo "shipped source writes to the console" >&2
+            exit 1
+          fi

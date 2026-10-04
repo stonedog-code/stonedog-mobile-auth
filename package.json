@@ -1,0 +1,80 @@
+{
+  "name": "@stonedogcode/mobile-auth",
+  "version": "0.1.0",
+  "description": "Phone-side authentication helpers for Expo apps: PKCE for cross-device linking, and reading a 'connect a phone' QR or manual code. Pairs with @stonedogcode/auth on the server.",
+  "license": "Apache-2.0",
+  "author": "StoneDogCode L.L.C.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stonedog-code/stonedog-mobile-auth.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "//exports": "The Expo adapter is a separate entry point so the core never imports Expo: it stays testable in Node, and an app that brings its own CryptoPort never resolves expo-crypto.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./expo": {
+      "types": "./dist/expo.d.ts",
+      "default": "./dist/expo.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "gate": "npm run type-check && npm run lint && npm run test:coverage && npm run build && npm run verify:package",
+    "lint": "eslint .",
+    "prepack": "npm run build",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "type-check": "tsc --noEmit",
+    "verify:package": "bash scripts/verify-package.sh"
+  },
+  "//dependencies": "None at runtime, deliberately. This sits on the sign-in path of every app that adopts it, so it should be auditable in an afternoon; every dependency it takes, every consumer inherits.",
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@stonedogcode/auth": "^0.4.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^10.0.0",
+    "expo-crypto": "~57.0.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.11",
+    "typescript": "^5.9.3"
+  },
+  "//peerDependencies": "expo-crypto is needed only by the ./expo entry point, so it is optional.",
+  "peerDependencies": {
+    "expo-crypto": ">=57"
+  },
+  "peerDependenciesMeta": {
+    "expo-crypto": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "expo",
+    "react-native",
+    "authentication",
+    "pkce",
+    "qr",
+    "device-linking"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
