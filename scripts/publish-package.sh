@@ -250,22 +250,48 @@ say "Publishing $PACKAGE_NAME@$VERSION — npm will ask for your 2FA code"
 npm publish --access public
 
 # ---------------------------------------------------------------------------
-# 9. PROVE IT. The registry is eventually consistent for a few seconds, so this
-#    polls rather than asserting once, and ends with a real install.
+# 9. PROVE IT, from the registry, with a real install.
+#
+#    The registry has two parts that become visible at different times: the
+#    TARBALL, and the package METADATA (the document `npm view` and
+#    `npm install <name>` read). Measured on 0.1.0's first publish (2026-10-04):
+#    the tarball answered 200 and the account listed the package while the
+#    metadata answered 404 for several minutes. A 60-second poll on `npm view`
+#    alone would have reported a successful publish as a failure.
+#
+#    So: wait up to 5 minutes for the metadata. If it never appears but the
+#    tarball is downloadable, the publish DID happen. Say so plainly, and run the
+#    install proof against the tarball URL instead. Only when neither exists is
+#    it a failed publish.
 # ---------------------------------------------------------------------------
 say "Verifying it is actually installable"
 PROBE_DIR="$(mktemp -d)"
 trap 'rm -rf "$PROBE_DIR"' EXIT
 
-for attempt in $(seq 1 20); do
-  if npm view "$PACKAGE_NAME@$VERSION" version >/dev/null 2>&1; then break; fi
-  [ "$attempt" -lt 20 ] || fail "$PACKAGE_NAME@$VERSION is still not on the registry after publishing. The publish did NOT succeed, whatever it printed."
-  sleep 3
+TARBALL_URL="https://registry.npmjs.org/$PACKAGE_NAME/-/${PACKAGE_NAME##*/}-$VERSION.tgz"
+INSTALL_SPEC="$PACKAGE_NAME@$VERSION"
+METADATA_OK=0
+WAIT_ATTEMPTS="${REGISTRY_WAIT_ATTEMPTS:-60}"  # 5 s each; overridable only to test this step quickly
+for attempt in $(seq 1 "$WAIT_ATTEMPTS"); do
+  if npm view "$PACKAGE_NAME@$VERSION" version >/dev/null 2>&1; then METADATA_OK=1; break; fi
+  [ $((attempt % 6)) -eq 0 ] && echo "  waiting for the registry metadata ($((attempt * 5))s)…"
+  sleep 5
 done
 
+if [ "$METADATA_OK" -eq 1 ]; then
+  echo "  the registry lists $PACKAGE_NAME@$VERSION"
+elif [ "$(curl -s -o /dev/null -w '%{http_code}' "$TARBALL_URL")" = "200" ]; then
+  printf '  \033[33mThe tarball is published, but the registry metadata is still lagging after 5 minutes.\033[0m\n'
+  echo "  This is npm's propagation delay, not a failed publish. Verifying from the tarball instead;"
+  echo "  'npm install $PACKAGE_NAME' will work once the metadata catches up."
+  INSTALL_SPEC="$TARBALL_URL"
+else
+  fail "$PACKAGE_NAME@$VERSION is not on the registry: neither its metadata nor its tarball ($TARBALL_URL) exists after 5 minutes. The publish did NOT succeed, whatever it printed."
+fi
+
 printf '{"name":"probe","version":"1.0.0"}' > "$PROBE_DIR/package.json"
-(cd "$PROBE_DIR" && npm install --silent "$PACKAGE_NAME@$VERSION" >/dev/null 2>&1) \
-  || fail "$PACKAGE_NAME@$VERSION resolves but cannot be installed."
+(cd "$PROBE_DIR" && npm install --silent "$INSTALL_SPEC" >/dev/null 2>&1) \
+  || fail "$PACKAGE_NAME@$VERSION is on the registry but cannot be installed (from $INSTALL_SPEC)."
 
 INSTALLED="$(node -p "require('$PROBE_DIR/node_modules/$PACKAGE_NAME/package.json').version")"
 [ "$INSTALLED" = "$VERSION" ] || fail "installed $INSTALLED but published $VERSION."
