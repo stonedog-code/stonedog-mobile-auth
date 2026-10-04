@@ -7,8 +7,12 @@ connect-code format, so change both together.
 - **PUBLIC repository.** No issue ids, internal hostnames or product names in shipped source or
   the README. PRDs live in the internal `stonedog-prd` repo, reached through the gitignored
   `docs/prd` symlink.
-- **No runtime dependencies.** Expo is reached only through `src/expo.ts` (the `./expo` entry)
-  and an optional peer.
+- **No runtime dependencies.** Each optional capability is its own entry with an optional peer:
+  `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
+  (expo-secure-store, expo-local-authentication). The core `.` entry imports none of them.
+- **Device key:** randomness only from the caller's `CryptoPort`; signing deterministic (RFC 6979,
+  `extraEntropy: false`), so @noble/curves never reaches for `crypto.getRandomValues`. Signatures
+  are DER + standard base64 so `node:crypto`'s `createVerify("SHA256")` verifies them unchanged.
 - **Hermes-safe core.** No `Buffer`, no Node built-ins outside `src/__tests__`.
 - **Errors carry reason codes, never secrets.**
 - **Gate:** `npm run gate`. It ends with `verify:package`, which installs the packed tarball into

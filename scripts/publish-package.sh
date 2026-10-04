@@ -22,11 +22,11 @@
 #    sign-in path of every app that adopts it, so a dependency added without
 #    noticing is inherited by all of them. Gated below, not just commented.
 #
-# 2. **expo-crypto must stay an OPTIONAL peer.** Only the `./expo` entry point
-#    uses it, and an app that supplies its own CryptoPort must be able to install
-#    this package without pulling in Expo.
+# 2. **Every peer must stay OPTIONAL.** expo-crypto (./expo), @noble/curves
+#    (./device-key), expo-secure-store and expo-local-authentication
+#    (./expo-device-key) are each needed only by one entry point.
 #
-# 3. **Two entry points** (`.` and `./expo`). A tarball missing either installs
+# 3. **Four entry points** (`.`, `./expo`, `./device-key`, `./expo-device-key`). A tarball missing any of them installs
 #    fine and fails at the consumer's first import.
 #
 # 4. **Shipped source must be Hermes-safe.** No Buffer, URL, URLSearchParams or
@@ -43,7 +43,7 @@ PACKAGE_NAME="@stonedogcode/mobile-auth"
 # package would produce (3: package.json, README, LICENSE).
 MIN_FILES=20
 # Every path `exports` names.
-REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts")
+REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts" "dist/device-key.js" "dist/device-key.d.ts" "dist/expo-device-key.js" "dist/expo-device-key.d.ts")
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -159,11 +159,22 @@ node -e '
     process.exit(1);
   }
 
-  const meta = (pkg.peerDependenciesMeta || {})["expo-crypto"];
-  if (!(pkg.peerDependencies || {})["expo-crypto"] || !meta || meta.optional !== true) {
-    console.error("REFUSING: expo-crypto must be an OPTIONAL peer dependency. Only the ./expo entry uses it,");
-    console.error("  and an app with its own CryptoPort must be able to install this without Expo.");
-    process.exit(1);
+  // Every peer must be OPTIONAL: each is needed only by the entry point that
+  // imports it, and an app that never imports that entry must not be asked
+  // to install it.
+  const peers = Object.keys(pkg.peerDependencies || {});
+  for (const name of ["expo-crypto", "@noble/curves", "expo-secure-store", "expo-local-authentication"]) {
+    if (!peers.includes(name)) {
+      console.error(`REFUSING: ${name} is missing from peerDependencies, but an entry point imports it.`);
+      process.exit(1);
+    }
+  }
+  for (const name of peers) {
+    const meta = (pkg.peerDependenciesMeta || {})[name];
+    if (!meta || meta.optional !== true) {
+      console.error(`REFUSING: peer ${name} is not marked optional. Each peer is needed only by one entry point.`);
+      process.exit(1);
+    }
   }
 
   if (pkg.license !== "Apache-2.0") {
@@ -176,7 +187,7 @@ node -e '
     process.exit(1);
   }
 '
-echo "  zero dependencies; expo-crypto an optional peer; Apache-2.0; public"
+echo "  zero dependencies; every peer optional; Apache-2.0; public"
 
 # ---------------------------------------------------------------------------
 # 5. No credential can reach a log from shipped source.
@@ -303,9 +314,11 @@ done
 
 # Installing this package alone must NOT pull in Expo. That is the point of the
 # optional peer, and it is what an app supplying its own CryptoPort depends on.
-if [ -d "$PROBE_DIR/node_modules/expo-crypto" ] || [ -d "$PROBE_DIR/node_modules/expo" ]; then
-  fail "installing $PACKAGE_NAME alone pulled in expo-crypto or expo. It must stay an optional peer."
-fi
+for peer in expo expo-crypto expo-secure-store expo-local-authentication @noble/curves; do
+  if [ -d "$PROBE_DIR/node_modules/$peer" ]; then
+    fail "installing $PACKAGE_NAME alone pulled in $peer. Every peer must stay optional."
+  fi
+done
 
 printf '\n\033[32m✓ %s@%s is published and installable.\033[0m\n' "$PACKAGE_NAME" "$VERSION"
 echo "  https://www.npmjs.com/package/$PACKAGE_NAME"

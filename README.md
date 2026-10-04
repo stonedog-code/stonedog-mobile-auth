@@ -4,8 +4,8 @@ Phone-side authentication helpers for **Expo** apps. It pairs with
 [`@stonedogcode/auth`](https://github.com/stonedog-code/stonedog-auth), which holds the server
 side.
 
-Version 0.1.0 covers the first step of connecting a phone to an account that is already signed in
-on a website:
+It covers connecting a phone to an account that is already signed in on a website, and
+fingerprint sign-in with an on-device key:
 
 - **PKCE** (RFC 7636, S256 only). The phone keeps the verifier and sends only the challenge. A
   ticket that was photographed, relayed or intercepted can't be redeemed by anyone else.
@@ -90,10 +90,71 @@ read as 1 and O as 0.
 - a tight attempt limit;
 - confirmation on the signed-in website before anything is issued.
 
+## The on-device key (0.2.0)
+
+Fingerprint sign-in with a key that never leaves the phone. The private key is
+kept in `expo-secure-store` behind `requireAuthentication`: the Android Keystore
+protects it, the fingerprint unlocks it, and it is never synced. The phone signs
+the server's challenge; the server verifies with the public key it was given at
+enrolment.
+
+```bash
+npm install @noble/curves expo-secure-store expo-local-authentication
+```
+
+```ts
+import { createDeviceKey, signDeviceChallenge, getDevicePublicKey } from "@stonedogcode/mobile-auth/device-key";
+import { expoDeviceKeyStore, fingerprintAvailability } from "@stonedogcode/mobile-auth/expo-device-key";
+import { expoCrypto } from "@stonedogcode/mobile-auth/expo";
+
+// Only offer set-up on a phone with a STRONG biometric enrolled.
+if ((await fingerprintAvailability()).available) {
+  const { publicKeyPem } = await createDeviceKey({
+    store: expoDeviceKeyStore, crypto: expoCrypto, prompt: "Set up fingerprint sign-in",
+  });
+  await registerWithServer(publicKeyPem); // your app's API call, from a signed-in session
+}
+
+// Later, at sign-in: the read prompts for the fingerprint.
+const signature = await signDeviceChallenge({
+  store: expoDeviceKeyStore, challenge: serverChallenge, prompt: "Use your fingerprint to sign in",
+});
+```
+
+**The signature format:** ECDSA P-256 over SHA-256, DER-encoded, standard base64.
+That's what `node:crypto` verifies by default:
+
+```ts
+createVerify("SHA256").update(challenge).verify(publicKeyPem, signature, "base64");
+```
+
+**Failures are reason codes.** Every app should handle these:
+
+| reason | meaning, and what the app should do |
+|---|---|
+| `authentication_cancelled` | the person dismissed the prompt; let them try again or use another way in |
+| `authentication_failed` | the fingerprint was not recognised |
+| `biometrics_unavailable` | no strong biometric is enrolled; don't offer fingerprint sign-in |
+| `key_missing` | this phone was never set up |
+| `key_invalidated` | Android dropped the key because the enrolled fingerprints changed; offer to set up again |
+| `key_corrupt`, `store_error` | treat as `key_missing`, and set up again |
+
+**Randomness.** It comes only from the `CryptoPort` you pass in. Signing is
+deterministic (RFC 6979), so the curve library never reaches for
+`crypto.getRandomValues`, which React Native does not reliably provide.
+
+**The server's half is yours to write:**
+- issue single-use, short-lived challenges;
+- store the public key per device;
+- verify;
+- rate-limit;
+- let the user revoke a phone.
+
 ## Design rules
 
-- **No runtime dependencies.** Expo's crypto is reached through the separate
-  `@stonedogcode/mobile-auth/expo` entry point and an optional peer dependency. The core never
+- **No runtime dependencies.** Each optional capability has its own entry point and optional
+  peer: `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
+  (expo-secure-store, expo-local-authentication). The core never
   imports Expo, so it is testable in Node, and an app can supply its own `CryptoPort`.
 - **No secret leaves through an error.** Errors carry a reason code, never the verifier, ticket
   or code.
@@ -101,12 +162,7 @@ read as 1 and O as 0.
 
 ## Roadmap
 
-These are planned and not in this release:
-- the fingerprint prompt;
-- a device-bound signing key;
-- token storage.
-
-They'll be added as the server side settles.
+Token storage, with single-flight refresh, is planned and not in this release.
 
 ## Development
 
