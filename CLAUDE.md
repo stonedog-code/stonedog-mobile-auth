@@ -13,5 +13,11 @@ connect-code format, so change both together.
 - **Errors carry reason codes, never secrets.**
 - **Gate:** `npm run gate`. It ends with `verify:package`, which installs the packed tarball into
   a throwaway project and runs it.
-- **Publishing** is manual, from a clean `main`: `npm publish` with a 2FA one-time password.
-  Bump the version in the same PR that adds an export.
+- **Releasing:** `npm run release` from a clean, current `main`, in a terminal (npm asks for the
+  2FA one-time password). It runs `scripts/publish-package.sh`: it refuses a stale or dirty
+  checkout, a version already published, a runtime dependency, or non-Hermes-safe source; reads
+  the tarball; publishes; then installs from the registry to prove it. `npm run release:dry-run`
+  runs every check and stops before publishing. Never call a script `publish`: that's npm's
+  lifecycle name and it would fire twice.
+- **Versions:** `npm run version:bump:patch` or `version:bump:minor`, in the same PR that changes
+  the code. A published version can never be reused.

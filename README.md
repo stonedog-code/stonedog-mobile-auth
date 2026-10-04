@@ -112,7 +112,9 @@ They'll be added as the server side settles.
 
 ```bash
 npm ci
-npm run gate   # type-check, lint, unit tests with coverage, build, and a packed-tarball consumer check
+npm run gate             # type-check, lint, unit tests with coverage, build, and a packed-tarball consumer check
+npm run release:dry-run  # every release check, stopping before npm publish
+npm run release          # publish (maintainers; from a clean, current main; asks for a 2FA code)
 ```
 
 ## Licence

@@ -38,8 +38,15 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "type-check": "tsc --noEmit",
-    "verify:package": "bash scripts/verify-package.sh"
+    "verify:package": "bash scripts/verify-package.sh",
+    "publish:stonedog-mobile-auth": "bash scripts/publish-package.sh",
+    "release": "npm run publish:stonedog-mobile-auth",
+    "release:dry-run": "bash scripts/publish-package.sh --dry-run",
+    "version:bump:patch": "npm version patch --no-git-tag-version",
+    "version:bump:minor": "npm version minor --no-git-tag-version"
   },
+  "//publish:stonedog-mobile-auth": "Run from a terminal, interactively: npm prompts for the 2FA one-time password and the login flow needs a browser. It refuses a checkout that is detached, dirty, or behind origin/main; refuses a version already published; refuses any runtime dependency, or expo-crypto as anything but an optional peer; refuses shipped source that is not Hermes-safe; refuses a tarball missing an entry point, README, LICENSE or NOTICE, or containing tests. Then it proves the result by installing from the registry into a temp directory and checking that installing alone pulls in no Expo.",
+  "//release": "One memorable command per repo, as in every other @stonedogcode package. It cannot be called `publish`: that is a reserved npm lifecycle name, so `npm publish` inside scripts/publish-package.sh would fire it and publish a second time. release:dry-run runs every check and stops before npm publish.",
   "//dependencies": "None at runtime, deliberately. This sits on the sign-in path of every app that adopts it, so it should be auditable in an afternoon; every dependency it takes, every consumer inherits.",
   "devDependencies": {
     "@eslint/js": "^10.0.0",
