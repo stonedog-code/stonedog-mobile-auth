@@ -139,9 +139,18 @@ createVerify("SHA256").update(challenge).verify(publicKeyPem, signature, "base64
 | `key_invalidated` | Android dropped the key because the enrolled fingerprints changed; offer to set up again |
 | `key_corrupt`, `store_error` | treat as `key_missing`, and set up again |
 
-**Randomness.** It comes only from the `CryptoPort` you pass in. Signing is
-deterministic (RFC 6979), so the curve library never reaches for
-`crypto.getRandomValues`, which React Native does not reliably provide.
+**Randomness.** Key generation takes randomness only from the `CryptoPort` you
+pass in, so it never depends on `crypto.getRandomValues`, which React Native
+does not reliably provide. Signing nonces are deterministic (RFC 6979). The
+curve library uses `getRandomValues` for side-channel blinding when the runtime
+has it, and falls back safely when it does not.
+
+**Storage.** The adapter keeps device-key entries on two dedicated keychain
+services, never the app's default. When Android invalidates a biometric-bound
+key it removes every entry on that key's service, and this keeps that from
+touching anything else the app stores. Neither platform enforces authentication
+on a read; protection comes from how the item was written, which is why
+`createDeviceKey` always writes the private key with `requireAuthentication`.
 
 **The server's half is yours to write:**
 - issue single-use, short-lived challenges;

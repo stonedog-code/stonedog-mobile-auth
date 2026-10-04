@@ -11,10 +11,13 @@
  *   format `node:crypto`'s `createVerify("SHA256").verify(pem, sig, "base64")`
  *   accepts by default. The server verifies with the PEM returned at enrolment.
  *
- * Randomness comes ONLY from the caller's `CryptoPort`. The key seed is passed
- * explicitly and signing is deterministic (RFC 6979, no extra entropy), so the
- * curve library never reaches for `crypto.getRandomValues`, which React Native
- * does not reliably provide.
+ * Key generation takes its randomness ONLY from the caller's `CryptoPort`: the
+ * seed is passed explicitly, so it never depends on `crypto.getRandomValues`,
+ * which React Native does not reliably provide. Signing nonces are
+ * deterministic (RFC 6979, no extra entropy). The curve library DOES use
+ * `getRandomValues` for side-channel blinding during signing when the runtime
+ * provides it, and falls back safely when it does not. Neither case changes
+ * the signature's validity or its nonce.
  *
  * This entry point (`@stonedogcode/mobile-auth/device-key`) needs the optional
  * peer `@noble/curves`. The core entry does not.
@@ -116,15 +119,21 @@ export async function createDeviceKey(
   if (seed.length !== (p256.lengths.seed ?? 48)) throw new MobileAuthError("bad_random_length");
   if (seed.every((b) => b === 0)) throw new MobileAuthError("random_source_returned_zeros");
 
+  // The seed fully determines the key, so it is zeroed with the key on every
+  // path, including a cancelled or failed store. (The hex string handed to the
+  // store cannot be zeroed; JavaScript strings are immutable.)
   const secretKey = p256.utils.randomSecretKey(seed);
-  const publicKeyPem = publicKeyToPem(p256.getPublicKey(secretKey, false));
-
-  // Private first: if it fails (cancelled, no biometrics), no public half is
-  // left behind claiming a key exists.
-  await options.store.set(priv, toHex(secretKey), { requireAuthentication: true, prompt: options.prompt });
-  await options.store.set(pub, publicKeyPem, { requireAuthentication: false });
-  secretKey.fill(0);
-  return { publicKeyPem };
+  try {
+    const publicKeyPem = publicKeyToPem(p256.getPublicKey(secretKey, false));
+    // Private first: if it fails (cancelled, no biometrics), no public half is
+    // left behind claiming a key exists.
+    await options.store.set(priv, toHex(secretKey), { requireAuthentication: true, prompt: options.prompt });
+    await options.store.set(pub, publicKeyPem, { requireAuthentication: false });
+    return { publicKeyPem };
+  } finally {
+    secretKey.fill(0);
+    seed.fill(0);
+  }
 }
 
 /** The registered public key, or null if this phone has no key. Never prompts. */

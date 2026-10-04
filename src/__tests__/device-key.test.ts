@@ -148,6 +148,23 @@ describe("on-device key", () => {
     expect(await getDevicePublicKey({ store: m.store })).toBeNull();
   });
 
+  it("zeroes the seed it was given, even when storing the key fails", async () => {
+    const seen: Uint8Array[] = [];
+    const recording: CryptoPort = {
+      ...nodeCrypto,
+      randomBytes: (n) => {
+        const b = nodeCrypto.randomBytes(n);
+        seen.push(b);
+        return b;
+      },
+    };
+    const m = memoryStore();
+    const failing = { ...m.store, set: async () => { throw new Error("authentication_cancelled"); } };
+    await expect(createDeviceKey({ store: failing, crypto: recording, prompt: PROMPT })).rejects.toThrow();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.every((b) => b === 0)).toBe(true);
+  });
+
   it("removes both halves", async () => {
     const m = memoryStore();
     await createDeviceKey({ store: m.store, crypto: nodeCrypto, prompt: PROMPT });

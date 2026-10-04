@@ -10,8 +10,10 @@ connect-code format, so change both together.
 - **No runtime dependencies.** Each optional capability is its own entry with an optional peer:
   `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
   (expo-secure-store, expo-local-authentication). The core `.` entry imports none of them.
-- **Device key:** randomness only from the caller's `CryptoPort`; signing deterministic (RFC 6979,
-  `extraEntropy: false`), so @noble/curves never reaches for `crypto.getRandomValues`. Signatures
+- **Device key:** key-generation randomness only from the caller's `CryptoPort`; signing nonces
+  deterministic (RFC 6979, `extraEntropy: false`). @noble/curves uses `getRandomValues` only for
+  optional blinding, and falls back safely without it. The Expo adapter uses two dedicated
+  keychain services (never the default), because an invalidation wipes a whole service. Signatures
   are DER + standard base64 so `node:crypto`'s `createVerify("SHA256")` verifies them unchanged.
 - **Hermes-safe core.** No `Buffer`, no Node built-ins outside `src/__tests__`.
 - **Errors carry reason codes, never secrets.**

@@ -25,6 +25,7 @@ describe("expoDeviceKeyStore", () => {
     expect(secure.setItemAsync).toHaveBeenCalledWith("k", "v", {
       requireAuthentication: true,
       authenticationPrompt: "Use your fingerprint",
+      keychainService: "stonedog.device-key.protected",
       keychainAccessible: 6,
     });
   });
@@ -32,7 +33,11 @@ describe("expoDeviceKeyStore", () => {
   it("reads without a prompt when none is needed", async () => {
     secure.getItemAsync.mockResolvedValue("pem");
     await expect(expoDeviceKeyStore.get("k", { requireAuthentication: false })).resolves.toBe("pem");
-    expect(secure.getItemAsync).toHaveBeenCalledWith("k", { requireAuthentication: false, keychainAccessible: 6 });
+    expect(secure.getItemAsync).toHaveBeenCalledWith("k", {
+      requireAuthentication: false,
+      keychainService: "stonedog.device-key.public",
+      keychainAccessible: 6,
+    });
   });
 
   it.each([
@@ -40,7 +45,13 @@ describe("expoDeviceKeyStore", () => {
     ["Could not Authenticate the user: No biometrics are currently enrolled", "biometrics_unavailable"],
     ["Could not Authenticate the user: No hardware available for biometric authentication.", "biometrics_unavailable"],
     ["Could not Authenticate the user: Couldn't get the authentication result", "authentication_failed"],
+    ["Could not Authenticate the user: unsupported", "biometrics_unavailable"],
+    ["Could not Authenticate the user: security update required", "biometrics_unavailable"],
     ["Could not decrypt the value for key 'k'", "store_error"],
+    // A store failure on a key whose NAME contains "cancel" or "authenticate"
+    // must stay a store failure, not pose as a cancelled prompt.
+    ["Could not decrypt the value for key 'cancelled-authentication'", "store_error"],
+    ["Encryption Failed. The key reauthenticate.key has been permanently invalidated", "store_error"],
   ])("maps %p to %s, without attaching the original message", async (message, reason) => {
     secure.getItemAsync.mockRejectedValue(new Error(message));
     const error = await expoDeviceKeyStore.get("secret-key-name", { requireAuthentication: true }).catch((e: Error) => e);
@@ -49,16 +60,27 @@ describe("expoDeviceKeyStore", () => {
   });
 
   it("maps failures on write and delete too", async () => {
-    secure.setItemAsync.mockRejectedValue(new Error("Authentication was cancelled"));
+    secure.setItemAsync.mockRejectedValue(new Error("Could not Authenticate the user: Authentication was cancelled"));
     await expect(expoDeviceKeyStore.set("k", "v", { requireAuthentication: true })).rejects.toThrow("authentication_cancelled");
     secure.deleteItemAsync.mockRejectedValue("boom");
     await expect(expoDeviceKeyStore.remove("k")).rejects.toThrow("store_error");
   });
 
-  it("deletes on this device's keychain", async () => {
+  it("deletes from both dedicated services", async () => {
     secure.deleteItemAsync.mockResolvedValue(undefined);
     await expoDeviceKeyStore.remove("k");
-    expect(secure.deleteItemAsync).toHaveBeenCalledWith("k", { keychainAccessible: 6 });
+    expect(secure.deleteItemAsync).toHaveBeenCalledWith("k", expect.objectContaining({ keychainService: "stonedog.device-key.protected" }));
+    expect(secure.deleteItemAsync).toHaveBeenCalledWith("k", expect.objectContaining({ keychainService: "stonedog.device-key.public" }));
+  });
+
+  it("never uses the app's default keychain service", async () => {
+    secure.setItemAsync.mockResolvedValue(undefined);
+    secure.getItemAsync.mockResolvedValue(null);
+    await expoDeviceKeyStore.set("k", "v", { requireAuthentication: false });
+    await expoDeviceKeyStore.get("k", { requireAuthentication: true });
+    for (const call of [...secure.setItemAsync.mock.calls, ...secure.getItemAsync.mock.calls]) {
+      expect((call[2] ?? call[1]) as { keychainService?: string }).toHaveProperty("keychainService");
+    }
   });
 });
 
