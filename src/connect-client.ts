@@ -32,7 +32,7 @@
  * - **It is only sent to the configured origin.** Every request is built from
  *   `origin` + a path that must be origin-relative (`/...`, never `//...` or
  *   a full URL), so neither a route option nor the enrol function can point
- *   it anywhere else.
+ *   it anywhere else, and redirects are refused (`redirect: "error"`).
  * - **A QR whose origin differs from the configured one is refused**, by
  *   `parseConnectQr`'s allowlist, before anything is sent.
  *
@@ -54,6 +54,12 @@ export interface ConnectRequestInit {
   method: "POST";
   headers: Record<string, string>;
   body: string;
+  /**
+   * Always `"error"`: a redirect is never followed, so a server-side open
+   * redirect cannot carry the enrolment token's bearer header anywhere else.
+   * A fetch that ignores the option still sees a 3xx, which is not success.
+   */
+  redirect: "error";
 }
 
 /** `fetch`, or anything shaped like it. Injected so the module runs and tests without a network. */
@@ -320,7 +326,7 @@ export function createConnectClient(options: ConnectClientOptions): ConnectClien
         timer = timers.setTimeout(() => resolve(TIMED_OUT), requestTimeoutMs);
       });
       const res = await Promise.race([
-        doFetch(url, { method: "POST", headers: headers(bearer), body: JSON.stringify(body) }),
+        doFetch(url, { method: "POST", headers: headers(bearer), body: JSON.stringify(body), redirect: "error" }),
         timeout,
       ]);
       return res === TIMED_OUT ? null : res;

@@ -385,6 +385,14 @@ describe("enrol", () => {
     expect(s.calls[0]!.body).toEqual({ publicKey: "PEM" });
   });
 
+  it("never follows a redirect, and a 3xx is not success", async () => {
+    const grant = await confirmedGrant();
+    const s = scripted({ status: 307 });
+    const r = await client(s.fetch).enrol(grant, (post) => post("/k", {}));
+    expect(s.calls[0]!.init.redirect).toBe("error");
+    expect(r).toEqual({ kind: "refused", status: 307, code: null });
+  });
+
   it("spends the grant on success: a second use never reaches the server", async () => {
     const grant = await confirmedGrant();
     const s = scripted({ status: 200, body: {} });

@@ -20,7 +20,7 @@ interface Seen {
 }
 
 /** A tiny in-process server for the contract: connect, complete (polled), cancel, and a key route. */
-function contractServer() {
+function contractServer(redirectTo = "http://127.0.0.1:9/") {
   const seen: Seen[] = [];
   const rows = new Map<string, { ticket: string; nonce: string; polls: number; cancelled: boolean; spent: boolean }>();
   let issued = 0;
@@ -70,6 +70,10 @@ function contractServer() {
       const row = find();
       if (row) row.cancelled = true;
       return send(204);
+    }
+    if (path === "/api/mobile/v1/devices/redirect") {
+      res.writeHead(307, { Location: redirectTo });
+      return res.end();
     }
     if (path === "/api/mobile/v1/devices/key") {
       if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: "unauthorised" });
@@ -159,6 +163,27 @@ describe("connect client against a contract server (integration)", () => {
     expect(await c.waitForConfirmation({ collect: presented.collect, nonce: presented.nonce })).toEqual({
       kind: "not_confirmed",
     });
+  });
+
+  it("a redirect from the configured origin is not followed: the token goes nowhere else", async () => {
+    const elsewhere = contractServer();
+    const elsewhereOrigin = await elsewhere.start();
+    await srv.stop();
+    srv = contractServer(`${elsewhereOrigin}/api/mobile/v1/devices/key`);
+    origin = await srv.start();
+    try {
+      const c = make();
+      const presented = await c.present({ ticket: TICKET });
+      if (presented.kind !== "ok") throw new Error(presented.kind);
+      const waited = await c.waitForConfirmation({ collect: presented.collect, nonce: presented.nonce });
+      if (waited.kind !== "confirmed") throw new Error(waited.kind);
+      const r = await c.enrol(waited.grant, (post) => post("/api/mobile/v1/devices/redirect", {}));
+      expect(r.kind).toBe("offline");
+      expect(waited.grant.spent).toBe(false);
+      expect(elsewhere.seen).toEqual([]);
+    } finally {
+      await elsewhere.stop();
+    }
   });
 
   it("an unknown code is wrong_code; an unreachable server is offline", async () => {
