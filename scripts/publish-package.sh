@@ -43,7 +43,7 @@ PACKAGE_NAME="@stonedogcode/mobile-auth"
 # package would produce (3: package.json, README, LICENSE).
 MIN_FILES=20
 # Every path `exports` names.
-REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts" "dist/device-key.js" "dist/device-key.d.ts" "dist/expo-device-key.js" "dist/expo-device-key.d.ts")
+REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts" "dist/device-key.js" "dist/device-key.d.ts" "dist/expo-device-key.js" "dist/expo-device-key.d.ts" "dist/connect-client.js" "dist/connect-client.d.ts")
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"

@@ -30,6 +30,9 @@ jobs:
       # Coverage thresholds are enforced, not just measured.
       - run: npm run test:coverage
 
+      # The connect client against a real in-process HTTP server.
+      - run: npm run test:integration
+
       # A green gate that examined nothing is the failure this guards against.
       - name: Prove the gate was not vacuous
         run: |

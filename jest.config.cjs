@@ -28,6 +28,9 @@ module.exports = {
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   testMatch: ["<rootDir>/src/**/__tests__/**/*.test.ts"],
+  // The integration tier has its own config (jest.integration.config.cjs) and
+  // its own script, so a unit run never opens a socket.
+  testPathIgnorePatterns: ["/node_modules/", "/__tests__/integration/"],
   collectCoverageFrom: ["src/**/*.ts", "!src/**/__tests__/**", "!src/index.ts", "!src/expo.ts"],
   // A package on the sign-in path of every mobile app that adopts it. The
   // floor is high because an uncovered branch here is usually a rejection path.

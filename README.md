@@ -159,14 +159,60 @@ on a read; protection comes from how the item was written, which is why
 - rate-limit;
 - let the user revoke a phone.
 
+## The connect client (0.3.0)
+
+The network half of "connect a phone": present the scanned ticket or typed
+code, wait for the website to confirm, back out, and register the device key
+with the short-lived enrolment token. It needs no peer: you inject `fetch`.
+
+```ts
+import { createConnectClient, createConnectReducer, initialConnectState } from "@stonedogcode/mobile-auth";
+
+const client = createConnectClient({
+  origin: "https://app.example.com", // from the app's build configuration, never from a QR
+  fetch,
+  // Optional. Defaults shown in DEFAULT_CONNECT_PATHS; override any of them.
+  paths: { connect: "/api/mobile/v1/auth/connect" },
+  headers: () => ({ "X-Client-Timezone": timezone }),
+  requestTimeoutMs: 15_000, pollIntervalMs: 2_000, waitTimeoutMs: 125_000, maxPollFailures: 3,
+});
+const reduce = createConnectReducer(client); // a pure reducer for useReducer
+```
+
+| call | sends | results |
+|---|---|---|
+| `readScanned(raw)` / `readTyped(raw)` | nothing | `{ ok, ref }`, or a reason such as `origin_not_allowed`, `too_short` |
+| `present(ref, device?)` | `POST connect {ticket \| code, device}` | `ok` (with `collect`, `nonce`, `maskedEmail`), `used_or_expired`, `wrong_code`, `rate_limited`, `too_many_codes`, `offline`, `failed` |
+| `waitForConfirmation({ collect, nonce, shouldStop })` | `POST complete {ticket \| ticketId, nonce}`, polled | `confirmed` (with an `EnrolmentGrant`), `not_confirmed` (404/410), `rate_limited`, `timed_out`, `offline`, `failed`, `stopped` |
+| `cancel(collect, nonce)` | `POST cancel` | `sent` or `not_sent`; never throws |
+| `enrol(grant, (post) => …)` | whatever your function posts, with the token as the bearer | `ok` (your value), `token_expired`, `cancelled`, `offline`, `refused` (status and the server's `error`), `failed` |
+
+Every result is a code. The words a person sees are the app's.
+
+**The enrolment token is never stored, and never handed to you.**
+`waitForConfirmation` wraps it in an opaque `EnrolmentGrant` that serialises to
+a redacted placeholder, so persisting screen state cannot write it. Your enrol
+function receives a `post(path, body)` that sends to the configured origin with
+the token as the bearer; it never receives the token. A path that is not
+origin-relative (`//host`, a full URL, `..`) is refused, so the token cannot be
+sent anywhere else. The grant is spent after a successful enrolment or a 401.
+
+**A QR for any other origin is refused** before anything is sent, by the same
+allowlist check as `parseConnectQr`.
+
+**The server's half is yours to write:** single-use, short-lived tickets;
+confirmation on the signed-in website; `202` until then and `200` exactly once;
+an enrolment token honoured only on the key-registration routes, for minutes,
+and never refreshable; a tight attempt limit on typed codes.
+
 ## Design rules
 
 - **No runtime dependencies.** Each optional capability has its own entry point and optional
   peer: `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
   (expo-secure-store, expo-local-authentication). The core never
   imports Expo, so it is testable in Node, and an app can supply its own `CryptoPort`.
-- **No secret leaves through an error.** Errors carry a reason code, never the verifier, ticket
-  or code.
+- **No secret leaves through an error.** Errors carry a reason code, never the verifier, ticket,
+  code or enrolment token.
 - **Runs on Hermes.** The core doesn't use `Buffer`.
 
 ## Roadmap

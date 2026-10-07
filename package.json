@@ -1,7 +1,7 @@
 {
   "name": "@stonedogcode/mobile-auth",
-  "version": "0.2.0",
-  "description": "Phone-side authentication helpers for Expo apps: PKCE and 'connect a phone' codes, and an on-device P-256 key unlocked by the fingerprint. Pairs with @stonedogcode/auth on the server.",
+  "version": "0.3.0",
+  "description": "Phone-side authentication helpers for Expo apps: PKCE, 'connect a phone' codes and the client that redeems them, and an on-device P-256 key unlocked by the fingerprint. Pairs with @stonedogcode/auth on the server.",
   "license": "Apache-2.0",
   "author": "StoneDogCode L.L.C.",
   "repository": {
@@ -40,11 +40,12 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "gate": "npm run type-check && npm run lint && npm run test:coverage && npm run build && npm run verify:package",
+    "gate": "npm run type-check && npm run lint && npm run test:coverage && npm run test:integration && npm run build && npm run verify:package",
     "lint": "eslint .",
     "prepack": "npm run build",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.cjs",
     "type-check": "tsc --noEmit",
     "verify:package": "bash scripts/verify-package.sh",
     "publish:stonedog-mobile-auth": "bash scripts/publish-package.sh",
