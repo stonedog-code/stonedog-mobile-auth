@@ -43,9 +43,12 @@ export default [
         it: "readonly",
         expect: "readonly",
         beforeEach: "readonly",
+        afterEach: "readonly",
         jest: "readonly",
         // Tests run in Node and compare against its encoder; shipped source may not.
         Buffer: "readonly",
+        // The integration tier drives the connect client with Node's own fetch.
+        fetch: "readonly",
       },
     },
   },

@@ -18,6 +18,7 @@ echo "tarball: $TARBALL ($(printf '%s\n' "$LIST" | wc -l) files)"
 for f in package/dist/index.js package/dist/index.d.ts package/dist/expo.js package/dist/expo.d.ts \
          package/dist/device-key.js package/dist/device-key.d.ts \
          package/dist/expo-device-key.js package/dist/expo-device-key.d.ts \
+         package/dist/connect-client.js package/dist/connect-client.d.ts \
          package/LICENSE package/NOTICE package/README.md; do
   printf '%s\n' "$LIST" | grep -qx "$f" || { echo "MISSING from tarball: $f" >&2; exit 1; }
 done
@@ -57,6 +58,20 @@ const challenge = "consumer-check-challenge-0123456789";
 const sig = await signDeviceChallenge({ store, challenge, prompt: "Use your fingerprint" });
 const v = createVerify("SHA256"); v.update(challenge);
 if (!v.verify(publicKeyPem, sig, "base64")) throw new Error("device-key signature rejected by node:crypto");
-console.log("consumer import + run: ok (PKCE, connect code, device key)");
+// The connect client, as a consumer drives it, with a scripted fetch.
+const { createConnectClient } = await import("@stonedogcode/mobile-auth");
+const replies = [{ status: 200, body: { nonce: "n" } }, { status: 202 }, { status: 200, body: { enrolmentToken: "tok" } }];
+const sent = [];
+const client = createConnectClient({
+  origin: "https://app.example.com",
+  fetch: async (url, init) => { sent.push([url, init]); const r = replies.shift(); return { status: r.status, json: async () => r.body }; },
+  sleep: async () => {},
+});
+if (client.readScanned(`https://evil.example/connect#t=${t}`).ok) throw new Error("foreign-origin QR accepted");
+const p = await client.present({ ticket: t });
+if (p.kind !== "ok") throw new Error("present: " + p.kind);
+const w = await client.waitForConfirmation({ collect: p.collect, nonce: p.nonce });
+if (w.kind !== "confirmed" || JSON.stringify(w.grant).includes("tok")) throw new Error("wait: " + w.kind);
+console.log("consumer import + run: ok (PKCE, connect code, connect client, device key)");
 JS
 node check.mjs
