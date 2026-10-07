@@ -491,11 +491,13 @@ describe("the enrolment token is never stored", () => {
     );
     const c = client(s.fetch);
     const reduce = createConnectReducer(c);
-    const seen: ConnectState[] = [];
+    // Serialised at each step, not afterwards: a spent grant has dropped its
+    // token, so a leak checked after the flow would be invisible.
+    const seen: string[] = [];
     let state: ConnectState = initialConnectState;
     const step = (e: ConnectEvent): ConnectState => {
       const next = reduce(state, e);
-      seen.push(next);
+      seen.push(JSON.stringify(next));
       return next;
     };
     state = step({ type: "scan" });
@@ -514,7 +516,8 @@ describe("the enrolment token is never stored", () => {
     state = step({ type: "enrolled", result: await c.enrol(state.grant, enrolFn) });
     expect(state).toEqual({ step: "done" });
 
-    for (const st of seen) expect(JSON.stringify(st)).not.toContain(TOKEN);
+    expect(seen.some((st) => st.includes('"step":"enrol"'))).toBe(true);
+    for (const st of seen) expect(st).not.toContain(TOKEN);
     // And on the wire it went only to the configured origin, only as a bearer, never in a body.
     for (const call of s.calls) {
       expect(call.url.startsWith(`${ORIGIN}/`)).toBe(true);
