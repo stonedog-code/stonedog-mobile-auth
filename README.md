@@ -4,8 +4,8 @@ Phone-side authentication helpers for **Expo** apps. It pairs with
 [`@stonedogcode/auth`](https://github.com/stonedog-code/stonedog-auth), which holds the server
 side.
 
-It covers connecting a phone to an account that is already signed in on a website, and
-fingerprint sign-in with an on-device key:
+It covers connecting a phone to an account that is already signed in on a website,
+fingerprint sign-in with an on-device key, and keeping the session that sign-in produces:
 
 - **PKCE** (RFC 7636, S256 only). The phone keeps the verifier and sends only the challenge. A
   ticket that was photographed, relayed or intercepted can't be redeemed by anyone else.
@@ -205,25 +205,95 @@ confirmation on the signed-in website; `202` until then and `200` exactly once;
 an enrolment token honoured only on the key-registration routes, for minutes,
 and never refreshable; a tight attempt limit on typed codes.
 
+## Session storage (0.4.0)
+
+The access and refresh tokens, kept in `expo-secure-store` and nowhere else, with a refresh that
+runs once however many requests need it.
+
+```bash
+npm install expo-secure-store
+```
+
+```ts
+import { createSessionStore, createSessionRefresher } from "@stonedogcode/mobile-auth";
+import { expoSessionStorage } from "@stonedogcode/mobile-auth/expo-session-storage";
+
+const session = createSessionStore({
+  storage: expoSessionStorage,
+  // Optional. If your app already stores tokens, keep its key names here,
+  // or every upgrade signs everyone out.
+  keys: { accessToken: "app.accessToken", refreshToken: "app.refreshToken" },
+});
+
+await session.save({ accessToken, refreshToken }); // after sign-in
+const current = await session.load();               // a Session, or null
+session.onCleared((reason) => showSignedOut(reason)); // "signed-out" | "session-ended"
+await session.clear("signed-out");
+
+const refresher = createSessionRefresher(session, {
+  origin: "https://app.example.com", // from the app's build configuration
+  fetch,
+  path: "/api/auth/refresh-token",   // the default; origin-relative only
+  headers: () => ({ "X-Client-Timezone": timezone }),
+  requestTimeoutMs: 15_000,          // the default
+});
+
+// Send; on a 401 refresh once and send again; if still refused, end the session.
+const res = await refresher.authorized((accessToken) =>
+  fetch(`${origin}/api/things`, { headers: { Authorization: `Bearer ${accessToken ?? ""}` } }),
+);
+```
+
+The refresh request is `POST <origin><path>` with `{ refreshToken }` as the body and, unless
+`sendAccessToken: false`, the access token as the bearer. A `2xx` must answer
+`{ accessToken, refreshToken }`.
+
+| call | results |
+|---|---|
+| `refresher.refresh()` | `refreshed` (with the new `Session`), `no_session`, `rejected` (status), `offline` (network, refused redirect or timeout), `invalid_response`, `superseded`, `store_error`. Never throws |
+| `refresher.authorized(send)` | the last response from `send`. Clears the session as `session-ended` when it is still `401` after one refresh (or the refresh failed) |
+
+**One refresh at a time.** Concurrent callers share the request in flight, per store. Most
+servers rotate refresh tokens on use, and a second refresh with the same token looks like a
+replay.
+
+**A refresh never brings a session back.** If the person signs out, or signs in again, while a
+refresh is in flight, its answer is discarded (`superseded`). Reads and writes run in turn, so a
+load never sees half of one session.
+
+**Tokens are not serialised by accident.** A `Session` reads its tokens through getters from a
+private map. `JSON.stringify` gives `{"session":"redacted"}`, `String()` gives `[Session]`, and it
+has no own properties to spread or log. Errors carry reason codes.
+
+**The refresh token only goes to the configured origin**, with `redirect: "error"`. Extra headers
+cannot set `Authorization`.
+
+**`expo-secure-store` only.** No AsyncStorage, no fallback to plain storage: if the keystore
+refuses, the call fails with `store_error`. Tokens are written without `requireAuthentication`,
+so a background refresh never raises a fingerprint prompt. With no options the adapter uses the
+app's default keychain service, which is where plain `SecureStore.setItemAsync(key, value)` put
+them.
+
+**The server's half is yours to write:** short-lived access tokens; refresh tokens that rotate
+on use and are bound to the device; revocation on sign-out; and a short grace window for a
+refresh whose answer was lost.
+
 ## Design rules
 
 - **No runtime dependencies.** Each optional capability has its own entry point and optional
   peer: `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
-  (expo-secure-store, expo-local-authentication). The core never
+  (expo-secure-store, expo-local-authentication), `./expo-session-storage` (expo-secure-store).
+  The core never
   imports Expo, so it is testable in Node, and an app can supply its own `CryptoPort`.
 - **No secret leaves through an error.** Errors carry a reason code, never the verifier, ticket,
-  code or enrolment token.
+  code, enrolment token, access token or refresh token.
 - **Runs on Hermes.** The core doesn't use `Buffer`.
-
-## Roadmap
-
-Token storage, with single-flight refresh, is planned and not in this release.
 
 ## Development
 
 ```bash
 npm ci
-npm run gate             # type-check, lint, unit tests with coverage, build, and a packed-tarball consumer check
+npm run gate             # type-check, lint, unit tests with coverage, integration tests, build, and a packed-tarball consumer check
 npm run release:dry-run  # every release check, stopping before npm publish
 npm run release          # publish (maintainers; from a clean, current main; asks for a 2FA code)
 ```

@@ -9,7 +9,14 @@ connect-code format, so change both together.
   `docs/prd` symlink.
 - **No runtime dependencies.** Each optional capability is its own entry with an optional peer:
   `./expo` (expo-crypto), `./device-key` (@noble/curves), `./expo-device-key`
-  (expo-secure-store, expo-local-authentication). The core `.` entry imports none of them.
+  (expo-secure-store, expo-local-authentication), `./expo-session-storage` (expo-secure-store).
+  The core `.` entry imports none of them.
+- **Session (0.4.0):** tokens only in the injected storage (the Expo adapter: expo-secure-store,
+  default keychain service, never `requireAuthentication`). A `Session` holds its tokens in a
+  WeakMap behind getters and serialises redacted. Refresh is single-flight per store; `save` and
+  `clear` bump a generation and a refresh writes only if it has not moved. The refresh's own write
+  deliberately does NOT bump it, so concurrent callers still refused after a refresh can end the
+  session. `authorized` refreshes at most once.
 - **Device key:** key-generation randomness only from the caller's `CryptoPort`; signing nonces
   deterministic (RFC 6979, `extraEntropy: false`). @noble/curves uses `getRandomValues` only for
   optional blinding, and falls back safely without it. The Expo adapter uses two dedicated
