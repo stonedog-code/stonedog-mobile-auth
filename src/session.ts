@@ -112,7 +112,7 @@ export class Session implements SessionTokens {
   }
 }
 
-// Node's inspector (console.log in tests and Node tools) reads this symbol.
+// Node's inspector (util.inspect, which Node's logging uses) reads this symbol.
 // Defined off the class so the published declarations name no private symbol.
 Object.defineProperty(Session.prototype, Symbol.for("nodejs.util.inspect.custom"), {
   value: () => "[Session]",
