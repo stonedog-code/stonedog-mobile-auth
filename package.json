@@ -1,7 +1,7 @@
 {
   "name": "@stonedogcode/mobile-auth",
-  "version": "0.3.0",
-  "description": "Phone-side authentication helpers for Expo apps: PKCE, 'connect a phone' codes and the client that redeems them, and an on-device P-256 key unlocked by the fingerprint. Pairs with @stonedogcode/auth on the server.",
+  "version": "0.4.0",
+  "description": "Phone-side authentication helpers for Expo apps: PKCE and 'connect a phone' codes, an on-device P-256 key unlocked by the fingerprint, and session storage with single-flight refresh. Pairs with @stonedogcode/auth on the server.",
   "license": "Apache-2.0",
   "author": "StoneDogCode L.L.C.",
   "repository": {
@@ -10,7 +10,7 @@
   },
   "type": "module",
   "sideEffects": false,
-  "//exports": "Each optional capability is its own entry point so the core never imports its peers: '.' needs nothing, './expo' needs expo-crypto, './device-key' needs @noble/curves, './expo-device-key' needs expo-secure-store and expo-local-authentication. An app installs only the peers for the entries it imports.",
+  "//exports": "Each optional capability is its own entry point so the core never imports its peers: '.' needs nothing, './expo' needs expo-crypto, './device-key' needs @noble/curves, './expo-device-key' needs expo-secure-store and expo-local-authentication, './expo-session-storage' needs expo-secure-store. An app installs only the peers for the entries it imports.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,6 +27,10 @@
     "./expo-device-key": {
       "types": "./dist/expo-device-key.d.ts",
       "default": "./dist/expo-device-key.js"
+    },
+    "./expo-session-storage": {
+      "types": "./dist/expo-session-storage.d.ts",
+      "default": "./dist/expo-session-storage.js"
     },
     "./package.json": "./package.json"
   },
@@ -107,7 +111,9 @@
     "biometric",
     "fingerprint",
     "p256",
-    "ecdsa"
+    "ecdsa",
+    "refresh-token",
+    "secure-store"
   ],
   "publishConfig": {
     "access": "public"

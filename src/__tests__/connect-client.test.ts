@@ -539,7 +539,10 @@ describe("the enrolment token is never stored", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, "..", "connect-client.ts"), "utf8");
     const imports = [...src.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map((m) => m[1]);
-    expect(imports.sort()).toEqual(["./connect-code.js", "./errors.js"]);
+    expect(imports.sort()).toEqual(["./connect-code.js", "./errors.js", "./http.js"]);
+    const http = readFileSync(join(here, "..", "http.ts"), "utf8");
+    expect([...http.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map((m) => m[1])).toEqual(["./errors.js"]);
+    expect(http).not.toMatch(/SecureStore|setItem|AsyncStorage|localStorage|setItemAsync/);
     expect(src).not.toMatch(/SecureStore|setItem|AsyncStorage|localStorage|setItemAsync/);
   });
 });

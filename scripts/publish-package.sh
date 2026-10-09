@@ -24,9 +24,10 @@
 #
 # 2. **Every peer must stay OPTIONAL.** expo-crypto (./expo), @noble/curves
 #    (./device-key), expo-secure-store and expo-local-authentication
-#    (./expo-device-key) are each needed only by one entry point.
+#    (./expo-device-key, and expo-secure-store again for ./expo-session-storage)
+#    are each needed only by the entry points that import them.
 #
-# 3. **Four entry points** (`.`, `./expo`, `./device-key`, `./expo-device-key`). A tarball missing any of them installs
+# 3. **Five entry points** (`.`, `./expo`, `./device-key`, `./expo-device-key`, `./expo-session-storage`). A tarball missing any of them installs
 #    fine and fails at the consumer's first import.
 #
 # 4. **Shipped source must be Hermes-safe.** No Buffer, URL, URLSearchParams or
@@ -43,7 +44,7 @@ PACKAGE_NAME="@stonedogcode/mobile-auth"
 # package would produce (3: package.json, README, LICENSE).
 MIN_FILES=20
 # Every path `exports` names.
-REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts" "dist/device-key.js" "dist/device-key.d.ts" "dist/expo-device-key.js" "dist/expo-device-key.d.ts" "dist/connect-client.js" "dist/connect-client.d.ts")
+REQUIRED_PATHS=("dist/index.js" "dist/index.d.ts" "dist/expo.js" "dist/expo.d.ts" "dist/device-key.js" "dist/device-key.d.ts" "dist/expo-device-key.js" "dist/expo-device-key.d.ts" "dist/connect-client.js" "dist/connect-client.d.ts" "dist/session.js" "dist/session.d.ts" "dist/expo-session-storage.js" "dist/expo-session-storage.d.ts")
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"

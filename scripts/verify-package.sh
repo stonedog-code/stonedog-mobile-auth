@@ -19,6 +19,8 @@ for f in package/dist/index.js package/dist/index.d.ts package/dist/expo.js pack
          package/dist/device-key.js package/dist/device-key.d.ts \
          package/dist/expo-device-key.js package/dist/expo-device-key.d.ts \
          package/dist/connect-client.js package/dist/connect-client.d.ts \
+         package/dist/session.js package/dist/session.d.ts \
+         package/dist/expo-session-storage.js package/dist/expo-session-storage.d.ts \
          package/LICENSE package/NOTICE package/README.md; do
   printf '%s\n' "$LIST" | grep -qx "$f" || { echo "MISSING from tarball: $f" >&2; exit 1; }
 done
@@ -72,6 +74,28 @@ const p = await client.present({ ticket: t });
 if (p.kind !== "ok") throw new Error("present: " + p.kind);
 const w = await client.waitForConfirmation({ collect: p.collect, nonce: p.nonce });
 if (w.kind !== "confirmed" || JSON.stringify(w.grant).includes("tok")) throw new Error("wait: " + w.kind);
-console.log("consumer import + run: ok (PKCE, connect code, connect client, device key)");
+// The session store and refresher, as a consumer drives them: single-flight
+// refresh, and a session that serialises without its tokens.
+const { createSessionStore, createSessionRefresher } = await import("@stonedogcode/mobile-auth");
+const kv = new Map();
+const sessionStore = createSessionStore({
+  storage: { get: async (k) => kv.get(k) ?? null, set: async (k, v) => { kv.set(k, v); }, remove: async (k) => { kv.delete(k); } },
+});
+await sessionStore.save({ accessToken: "a-secret", refreshToken: "r-secret" });
+let refreshCalls = 0;
+const refresher = createSessionRefresher(sessionStore, {
+  origin: "https://app.example.com",
+  fetch: async (url, init) => {
+    refreshCalls += 1;
+    if (url !== "https://app.example.com/api/auth/refresh-token" || init.redirect !== "error") throw new Error("refresh sent wrong: " + url);
+    await new Promise((r) => setTimeout(r, 5));
+    return { status: 200, json: async () => ({ accessToken: "a2-secret", refreshToken: "r2-secret" }) };
+  },
+});
+const rs = await Promise.all([refresher.refresh(), refresher.refresh(), refresher.refresh()]);
+if (refreshCalls !== 1 || rs.some((r) => r.kind !== "refreshed")) throw new Error("single-flight refresh: " + refreshCalls);
+const loadedSession = await sessionStore.load();
+if (loadedSession.accessToken !== "a2-secret" || JSON.stringify({ loadedSession }).includes("secret")) throw new Error("session serialised its tokens");
+console.log("consumer import + run: ok (PKCE, connect code, connect client, device key, session)");
 JS
 node check.mjs

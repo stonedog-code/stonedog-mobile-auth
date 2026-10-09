@@ -49,6 +49,9 @@ export default [
         Buffer: "readonly",
         // The integration tier drives the connect client with Node's own fetch.
         fetch: "readonly",
+        // Node timers and AbortSignal, to hold a request open or time it out.
+        setTimeout: "readonly",
+        AbortSignal: "readonly",
       },
     },
   },

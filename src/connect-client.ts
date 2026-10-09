@@ -41,6 +41,7 @@
  */
 import { normaliseManualCode, parseConnectQr, MANUAL_CODE_LENGTH, type ConnectCodeRejection } from "./connect-code.js";
 import { MobileAuthError } from "./errors.js";
+import { checkOrigin, checkPath, readJsonObject, timers } from "./http.js";
 
 // ── injected transport ───────────────────────────────────────────────────────
 
@@ -217,52 +218,9 @@ export class EnrolmentGrant {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const ORIGIN = /^(https?):\/\/([a-z0-9.-]+)(?::([0-9]{1,5}))?$/;
-/** Origin-relative, single leading slash: `/a/b`. Not `//host`, not a URL, no query or fragment. */
-const PATH = /^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/;
-
-function checkOrigin(raw: string, allowInsecureLocalhost: boolean): string {
-  const trimmed = raw.trim().replace(/\/+$/, "").toLowerCase();
-  const m = ORIGIN.exec(trimmed);
-  if (!m) throw new MobileAuthError("invalid_origin");
-  const scheme = m[1]!;
-  const host = m[2]!;
-  const port = m[3];
-  const isLocalhost = host === "localhost" || host === "127.0.0.1";
-  if (scheme !== "https" && !(isLocalhost && allowInsecureLocalhost)) throw new MobileAuthError("invalid_origin");
-  const defaultPort = (scheme === "https" && port === "443") || (scheme === "http" && port === "80");
-  return `${scheme}://${host}${port && !defaultPort ? `:${port}` : ""}`;
-}
-
-function checkPath(path: string): string {
-  if (!PATH.test(path) || path.split("/").includes("..")) throw new MobileAuthError("invalid_path");
-  return path;
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
-async function readJson(res: ConnectResponse): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await res.json();
-    return isObject(body) ? body : null;
-  } catch {
-    return null;
-  }
-}
+// The origin and path rules live in `./http.js`, shared with the session refresher.
 
 const TIMED_OUT = Symbol("timed_out");
-
-/**
- * Timers through `globalThis`, typed here, because the published build sees
- * only the ES library (no DOM, no Node), and every runtime this targets
- * (Hermes, Node, a browser) provides both.
- */
-const timers = globalThis as unknown as {
-  setTimeout(fn: () => void, ms: number): unknown;
-  clearTimeout(id: unknown): void;
-};
 
 function realSleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -367,7 +325,7 @@ export function createConnectClient(options: ConnectClientOptions): ConnectClien
     }
     if (res.status === 429) return { kind: byCode ? "too_many_codes" : "rate_limited" };
     if (res.status < 200 || res.status > 299) return { kind: "failed", status: res.status };
-    const json = await readJson(res);
+    const json = await readJsonObject(res);
     if (json === null || typeof json["nonce"] !== "string" || json["nonce"].length === 0) {
       return { kind: "failed", status: res.status };
     }
@@ -411,7 +369,7 @@ export function createConnectClient(options: ConnectClientOptions): ConnectClien
       } else {
         failures = 0;
         if (res.status === 200) {
-          const json = await readJson(res);
+          const json = await readJsonObject(res);
           const token = json?.["enrolmentToken"];
           if (typeof token !== "string" || token.length === 0) return { kind: "failed", status: 200 };
           const expiresIn = json?.["expiresIn"];
@@ -447,11 +405,11 @@ export function createConnectClient(options: ConnectClientOptions): ConnectClien
       const res = await post(path, body, token);
       if (res === null) throw new ConnectNetworkError();
       if (res.status < 200 || res.status > 299) {
-        const json = await readJson(res);
+        const json = await readJsonObject(res);
         const code = json?.["error"];
         throw new ConnectHttpError(res.status, typeof code === "string" ? code : null);
       }
-      return (await readJson(res)) ?? {};
+      return (await readJsonObject(res)) ?? {};
     };
     try {
       const value = await enrolFn(bound);
